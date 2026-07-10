@@ -1,0 +1,178 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id                  String                @id @default(cuid())
+  name                String?
+  email               String?               @unique
+  emailVerified       DateTime?
+  image               String?
+  accounts            Account[]
+  sessions            Session[]
+  simulations         Simulation[]
+  progress            Progress?
+  moduleVisits        ModuleVisit[]
+  quizSessions        QuizSession[]
+  virtualLabSequences VirtualLabSequence[]
+  evalSessions        EvalSession[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Simulation {
+  id         String   @id @default(cuid())
+  userId     String?
+  sequence   String
+  result     String   // "accepted" | "rejected"
+  steps      Int
+  duration   Float    // ms
+  algorithm  String   @default("complement")
+  baseCount  Json     // { A: n, T: n, C: n, G: n }
+  isFavorite Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// ─── Molecular Platform Enums ──────────────────────────────────────────────────
+
+enum ModuleId {
+  DNA_STRUCTURE
+  DNA_REPLICATION
+  TRANSCRIPTION
+  TRANSLATION
+  GENETIC_CODE
+  MUTATIONS
+  GENE_REGULATION
+  PROTEINS
+  CELL_CYCLE
+  EPIGENETICS
+  GENOMICS
+  BIOINFORMATICS
+  EVOLUTION
+  AMINO_ACIDS
+  VIRTUAL_LAB
+}
+
+enum EvalType {
+  FORMATIVE
+  SUMMATIVE
+}
+
+// ─── Molecular Platform Models ─────────────────────────────────────────────────
+
+/// Tracks overall learning progress per user (one record per user)
+model Progress {
+  userId         String     @id
+  visitedModules ModuleId[]
+  totalTimeMs    Int        @default(0)
+  updatedAt      DateTime   @updatedAt
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Individual module visit event
+model ModuleVisit {
+  id          String   @id @default(cuid())
+  userId      String
+  moduleId    ModuleId
+  durationMs  Int
+  visitedAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([moduleId])
+}
+
+/// A completed quiz session
+model QuizSession {
+  id             String       @id @default(cuid())
+  userId         String
+  moduleId       ModuleId?
+  score          Float
+  totalQuestions Int
+  completedAt    DateTime     @default(now())
+  answers        QuizAnswer[]
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Individual answer within a quiz session
+model QuizAnswer {
+  id          String      @id @default(cuid())
+  sessionId   String
+  questionId  String
+  selectedIdx Int
+  correct     Boolean
+  session     QuizSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+/// A DNA sequence saved from the virtual lab
+model VirtualLabSequence {
+  id       String   @id @default(cuid())
+  userId   String
+  name     String
+  sequence String
+  savedAt  DateTime @default(now())
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// An evaluation session (formative or summative)
+model EvalSession {
+  id          String     @id @default(cuid())
+  userId      String
+  evalType    EvalType
+  moduleIds   ModuleId[]
+  score       Float
+  completedAt DateTime   @default(now())
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
